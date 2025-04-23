@@ -27,6 +27,7 @@ Usage: $0 [OPTIONS]
 Required:
   --iso PATH           Path to ISO installation media
   --variant VARIANT    ISO variant: RHEL, Ubuntu, RHCoreOS
+  --domain NAME        Domain name for internal DNS (default: rhlab.local)
 
 Optional:
   --name NAME          Name of the VM (default: bastion)
@@ -38,8 +39,7 @@ Optional:
   --autopart           Use automatic partitioning (default: manual layout)
   --no-ks              Do not generate or use Kickstart (Ubuntu/RHCoreOS)
   --no-monitor         Do not monitor VM State (default: monitoring is ON)
-  --domain NAME        Domain name for internal DNS (default: rhlab.local)
-
+  
 
 Notes:
   - Without --autopart, manual partition layout is used (default).
