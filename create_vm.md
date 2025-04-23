@@ -34,7 +34,7 @@ Script có thể chạy trên các hệ điều hành **Fedora, RHEL, CentOS Str
   --user admin \
   --pass secret123 \
   --name bastion \
-  --domain rhlab.local
+  --domain rhlab.local \
   --cpu 4 --ram 8192 --disk 200
 ```
 
