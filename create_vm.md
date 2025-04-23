@@ -3,7 +3,7 @@
 ## 📌 Giới thiệu tổng quan
 
 Script `create_vm.sh` được thiết kế để **tự động hóa quá trình tạo và cài đặt máy ảo (VM)** trên nền tảng **libvirt/KVM** sử dụng công cụ `virt-install`.  
-Script có thể chạy trên các hệ điều hành **Fedora, RHEL, CentOS Stream, AlmaLinux, Rocky Linux**, hoặc bất kỳ distro nào hỗ trợ libvirt.
+Script có thể chạy trên các hệ điều hành **Fedora, RHEL, CentOS Stream, AlmaLinux, Rocky Linux** sử dụng *dnf* làm trình quản lý gói.
 
 ### ✨ Mục đích sử dụng:
 
