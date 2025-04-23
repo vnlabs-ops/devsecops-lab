@@ -107,6 +107,27 @@ function parse_arguments() {
   fi
 }
 
+# ==== CHECK FOR REQUIRED PACKAGES ON HOST
+function check_required_packages() {
+  echo "🔍 Kiểm tra các gói phần mềm cần thiết..."
+  local packages=(libvirt virt-install qemu-kvm genisoimage nmap-ncat tmux)
+  local missing=()
+
+  for pkg in "${packages[@]}"; do
+    if ! rpm -q "$pkg" &>/dev/null; then
+      missing+=("$pkg")
+    fi
+  done
+
+  if [[ ${#missing[@]} -gt 0 ]]; then
+    echo "⚠️  The following packages are missing: ${missing[*]}"
+    echo "⏳ Installing required packages..."
+    sudo dnf install -y "${missing[@]}"
+  else
+    echo "✅ All required packages already installed."
+  fi
+}
+
 # ==== PREPARE NETWORK CONTEXT ====
 function prepare_network_context() {
   echo "🌐 Preparing network context from 'virbr0'..."
