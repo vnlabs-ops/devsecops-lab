@@ -109,7 +109,7 @@ function parse_arguments() {
 
 # ==== CHECK FOR REQUIRED PACKAGES ON HOST
 function check_required_packages() {
-  echo "🔍 Kiểm tra các gói phần mềm cần thiết..."
+  echo "🔍 Checking for required packages..."
   local packages=(libvirt virt-install qemu-kvm genisoimage nmap-ncat tmux)
   local missing=()
 
@@ -278,7 +278,11 @@ systemctl enable --now named
 echo "allow $NETWORK_CIDR" >> /etc/chrony.conf
 systemctl enable --now chronyd
 
-echo "/data $NETWORK_CIDR(rw,sync,no_root_squash)" >> /etc/exports
+chmod 777 /data
+chown -R nobody:nobody /data
+semanage fcontext -a -t public_content_rw_t "/data(/.*)?"
+restorecon -Rv /data
+echo "/data *(rw,sync,no_subtree_check)" >> /etc/exports
 systemctl enable --now nfs-server rpcbind
 
 # Enable Window List extension for the user

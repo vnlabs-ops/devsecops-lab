@@ -142,3 +142,6 @@ Script sử dụng Kickstart chủ yếu cho các bản phân phối RHEL-like. 
 
 Nếu cần hỗ trợ nhiều nền tảng, bạn có thể thêm logic phát hiện `variant` trong script để sinh Kickstart tương ứng.
 
+### 📝 Xem thêm chi tiết về cấu hình và sử dụng NFS:
+Mặc dù script đã tự động cấu hình NFS trên VM, nhưng bạn có thể xem thêm chi tiết trong link bên dưới để biết rõ hơn về cách câu shinhf và sử dụng, đặc biệt là sử dụng NFS trong Openshift:
+https://access.redhat.com/articles/7083216
