@@ -225,6 +225,13 @@ firefox
 gnome-shell-extension-window-list
 gnome-terminal
 tmux
+make
+jq
+python3-jinja2
+python3-pyyaml
+ncurses
+which
+diffutils
 %end
 
 %post --interpreter=/bin/bash
