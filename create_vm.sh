@@ -12,6 +12,7 @@ GENERATE_KS=true
 AUTO_PARTITION=false
 MONITOR_REBOOT=true
 VM_LAB_DOMAIN="rhlab.local"
+VM_LAB_MAC="52:54:00:7D:32:A5"
 
 #---- Partitions ----
 ROOT_RATIO=35 # / chiếm 35% tổng dung lượng hard-disk 
@@ -39,19 +40,21 @@ Optional:
   --autopart           Use automatic partitioning (default: manual layout)
   --no-ks              Do not generate or use Kickstart (Ubuntu/RHCoreOS)
   --no-monitor         Do not monitor VM State (default: monitoring is ON)
+  --mac-address        Specify MAC Address for the VM manually (in case of RHCOS)
   
 
 Notes:
   - Without --autopart, manual partition layout is used (default).
   - For RHCoreOS:
       * Kickstart is not used (implied by --no-ks)
+      * Manually MAC Address must be specified
       * Reboot monitoring is disabled by default
       * You must explicitly use --autopart (manual partitioning not supported)
 
 Examples:
   $0 --iso /path/to/rhel.iso --variant RHEL --user demo --pass secret123
   $0 --iso /path/to/ubuntu.iso --variant Ubuntu --user ubuntu --pass ubuntu123 --no-ks
-  $0 --iso /path/to/rhcos.iso --variant RHCoreOS --user core --pass core123 --no-ks --autopart --no-monitor
+  $0 --iso /path/to/rhcos.iso --variant RHCoreOS --user core --pass core123 --mac-address 52:54:00:7D:32:A5 --no-ks --autopart --no-monitor
 EOF
 }
 
@@ -73,6 +76,7 @@ function parse_arguments() {
       --user) VM_USER="$2"; shift 2 ;;
       --pass) VM_PASS="$2"; shift 2 ;;
       --domain) VM_LAB_DOMAIN="$2"; shift 2;;
+      --mac-address) VM_LAB_MAC="$2"; shift 2;;
       --help) print_usage; exit 0 ;;
       *) echo "❌ Unknown option: $1"; print_usage; exit 1 ;;
     esac
@@ -101,9 +105,15 @@ function parse_arguments() {
     *) echo "❌ Unsupported ISO variant: $ISO_VARIANT"; exit 1 ;;
   esac
 
-  if [[ "$ISO_VARIANT" =~ ^(RHCoreOS|rhcos|RHCOS)$ && "$AUTO_PARTITION" == false ]]; then
+  if [[ "$ISO_VARIANT" =~ ^(RHCoreOS|rhcos|RHCOS)$ ]] then 
+  if [[ "$AUTO_PARTITION" == false ]]; then
     echo "❌ For RHCoreOS, you must use --autopart (manual partitioning is not supported)."
     exit 1
+  fi
+  if [[ -z "$VM_LAB_MAC" ]]; then
+    echo "❌ For RHCoreOS, you must specify MAC Address for the VM."
+    exit 1
+  fi
   fi
 }
 
@@ -340,7 +350,7 @@ function start_vm_installation() {
   if [[ "$GENERATE_KS" == false && "$ISO_VARIANT" =~ [Rr]hcos ]]; then
     sudo virt-install --name "$VM_NAME" --memory "$VM_MEM_MB" --vcpus "$VM_CPU" \
       --disk path="$disk_path",format=qcow2 --os-variant rhcos \
-      --network network=default --graphics vnc --location "$ISO_PATH" \
+      --network network=default,mac=$VM_LAB_MAC --graphics vnc --location "$ISO_PATH" \
       --extra-args "coreos.inst.install_dev=vda" \
       --noautoconsole
     return
