@@ -12,7 +12,7 @@ GENERATE_KS=true
 AUTO_PARTITION=false
 MONITOR_REBOOT=true
 VM_LAB_DOMAIN="rhlab.local"
-VM_LAB_MAC="52:54:00:7D:32:A5"
+VM_LAB_MAC="52:54:00:$(printf '%02x' $((RANDOM % 256))):$(printf '%02x' $((RANDOM % 256))):$(printf '%02x' $((RANDOM % 256)))"
 
 #---- Partitions ----
 ROOT_RATIO=35 # / chiếm 35% tổng dung lượng hard-disk 
@@ -54,7 +54,7 @@ Notes:
 Examples:
   $0 --iso /path/to/rhel.iso --variant RHEL --user demo --pass secret123
   $0 --iso /path/to/ubuntu.iso --variant Ubuntu --user ubuntu --pass ubuntu123 --no-ks
-  $0 --iso /path/to/rhcos.iso --variant RHCoreOS --user core --pass core123 --mac-address 52:54:00:7D:32:A5 --no-ks --autopart --no-monitor
+  $0 --iso /path/to/rhcos.iso --variant RHCoreOS --user core --pass core123 --mac-address $VM_LAB_MAC --no-ks --autopart --no-monitor
 EOF
 }
 
@@ -404,9 +404,34 @@ function monitor_vm_state() {
   done
 }
 
+# Function to show a spinner
+spinner() {
+    local pid=$!
+    local delay=0.1
+    local spinstr='|/-\'
+    while kill -0 $pid 2>/dev/null; do
+        local temp="${spinstr#?}"
+        printf "[ %c ] Waiting for services..." "$spinstr"
+        local spinstr=$temp${spinstr%"$temp"}
+        sleep $delay
+        printf "\r"
+    done
+    printf "[ ] Waiting for services... Done\n"
+}
+
 
 # ==== DONE ====
 function print_finish_message() {
+  # Simulate a background process (example: sleep for 10 seconds)
+  sleep 10 &
+
+  # Call the spinner function while the background task is running
+  spinner
+
+  if [[ "$GENERATE_KS" == false && "$ISO_VARIANT" =~ [Rr]hcos ]]; then
+    VM_LAB_MAC=$(virsh dumpxml "$VM_NAME" | grep -oP 'mac address="\K[^"]+')
+  fi
+
   echo
   cat <<EOF
 ===== FINISH =====
@@ -417,6 +442,7 @@ VM is ready!
   Username:   $VM_USER
   Password:   $VM_PASS
   IP Address: $VM_IP
+  MAC Address; $VM_LAB_MAC
 
 To connect:
   ssh $VM_USER@$VM_IP

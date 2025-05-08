@@ -50,6 +50,7 @@ Script có thể chạy trên các hệ điều hành **Fedora, RHEL, CentOS Str
   --iso /home/user/Downloads/rhcos-live.x86_64.iso \
   --variant RHCoreOS \
   --name coreos-node \
+  --mac-address 52:54:00:7D:32:A6 \
   --cpu 2 --ram 4096 --disk 40 \
   --autopart --no-monitor
 ```
