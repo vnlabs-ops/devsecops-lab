@@ -240,6 +240,7 @@ options {
     listen-on port 53 { any; };
     directory       "/var/named";
     allow-query     { any; };
+    forwarders { $GATEWAY; };
     recursion yes;
 };
 zone "$VM_LAB_DOMAIN" IN {
