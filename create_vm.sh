@@ -249,7 +249,7 @@ skopeo
 %post --interpreter=/bin/bash
 cat > /etc/named.conf <<NAMEDCONF
 options {
-    listen-on port 53 { 127.0.0.1; ; };
+    listen-on port 53 { 127.0.0.1; $VM_IP; };
     directory       "/var/named";
     allow-query     { any; };
     forwarders { $GATEWAY; };
