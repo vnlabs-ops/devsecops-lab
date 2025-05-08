@@ -222,8 +222,6 @@ bind-utils
 chrony
 nfs-utils
 firefox
-gnome-shell-extension-window-list
-gnome-terminal
 tmux
 make
 jq
@@ -232,16 +230,23 @@ python3-pyyaml
 ncurses
 which
 diffutils
+nmstate 
+net-tools
+podman
+skopeo
 %end
 
 %post --interpreter=/bin/bash
 cat > /etc/named.conf <<NAMEDCONF
 options {
-    listen-on port 53 { any; };
+    listen-on port 53 { 127.0.0.1; ; };
     directory       "/var/named";
     allow-query     { any; };
     forwarders { $GATEWAY; };
     recursion yes;
+    allow-recursion { any; };    
+    dnssec-validation no;
+
 };
 zone "$VM_LAB_DOMAIN" IN {
     type master;
