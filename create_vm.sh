@@ -224,7 +224,7 @@ PART
 
   sudo tee -a "$ks_path" > /dev/null <<EOF
 %packages
-@core
+@^Server with GUI
 kexec-tools
 git
 bind
