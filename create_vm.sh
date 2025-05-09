@@ -451,24 +451,24 @@ function print_finish_message() {
   shopt -u nocasematch
 
   echo
-  cat <<EOF
+cat <<EOF
 ===== FINISH =====
 VM is ready!
 
-  Name:       $VM_NAME
-  ISO:        $ISO_PATH
-  Username:   $VM_USER
-  Password:   $VM_PASS
-  IP Address: $VM_IP
-  MAC Address; $VM_LAB_MAC
+  Name:        $VM_NAME
+  ISO:         $ISO_PATH
+  Username:    $VM_USER
+  Password:    $VM_PASS
+  IP Address:  $VM_IP
+  MAC Address: $VM_LAB_MAC
 EOF
 
-  if [[ "$GENERATE_KS" == true ]]; then
-    echo
-    cat <<EOF
+if [[ "$GENERATE_KS" == true ]]; then
+  echo
+  cat <<EOF
 To connect:
-      ssh $VM_USER@$VM_IP
-    EOF
+    ssh $VM_USER@$VM_IP
+EOF
 
     echo -e "\n✅ Verifying services on VM ($VM_IP)..."
     echo -n "- DNS (port 53):     "; nc -zvw1 $VM_IP 53 && echo OK || echo FAILED
