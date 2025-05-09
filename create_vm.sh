@@ -90,7 +90,8 @@ function parse_arguments() {
     fi
 
     # Skip user/pass validation for RHCoreOS
-    if [[ ! "$ISO_VARIANT" =~ ^(RHCoreOS|rhcos|RHCOS)$ ]]; then
+    shopt -s nocasematch
+    if [[ ! "$ISO_VARIANT" =~ ^(RHCoreOS|rhcos)$ ]]; then
     if [[ -z "$VM_USER" || -z "$VM_PASS" ]]; then
         echo "❌ Missing --user or --pass."
         print_usage
@@ -99,13 +100,13 @@ function parse_arguments() {
     fi
 
   case "$ISO_VARIANT" in
-    Ubuntu|ubuntu) GENERATE_KS=false ;;
-    RHCoreOS|rhcos|RHCOS) GENERATE_KS=false; MONITOR_REBOOT=false ;;
-    RHEL|rhel) ;; # Accept RHEL in general
+    ubuntu) GENERATE_KS=false ;;
+    RHCoreOS|RHCOS) GENERATE_KS=false; MONITOR_REBOOT=false ;;
+    rhel) ;; # Accept RHEL in general
     *) echo "❌ Unsupported ISO variant: $ISO_VARIANT"; exit 1 ;;
   esac
 
-  if [[ "$ISO_VARIANT" =~ ^(RHCoreOS|rhcos|RHCOS)$ ]] then 
+  if [[ "$ISO_VARIANT" =~ ^(RHCoreOS|RHCOS)$ ]] then 
   if [[ "$AUTO_PARTITION" == false ]]; then
     echo "❌ For RHCoreOS, you must use --autopart (manual partitioning is not supported)."
     exit 1
@@ -115,6 +116,7 @@ function parse_arguments() {
     exit 1
   fi
   fi
+  shopt -u nocasematch
 }
 
 # ==== CHECK FOR REQUIRED PACKAGES ON HOST
@@ -341,21 +343,31 @@ function start_vm_installation() {
   local disk_path="$VM_IMG_DIR/${VM_NAME}.qcow2"
   sudo qemu-img create -f qcow2 "$disk_path" ${VM_DISK_SIZE}G
 
-  if [[ "$GENERATE_KS" == false && "$ISO_VARIANT" =~ [Uu]buntu ]]; then
+  shopt -s nocasematch
+  if [[ "$GENERATE_KS" == false && "$ISO_VARIANT" =~ ubuntu ]]; then
     sudo virt-install --name "$VM_NAME" --memory "$VM_MEM_MB" --vcpus "$VM_CPU" \
       --disk path="$disk_path",format=qcow2 --os-variant ubuntu20.04 \
       --network network=default --graphics vnc --cdrom "$ISO_PATH" --noautoconsole
     return
   fi
 
-  if [[ "$GENERATE_KS" == false && "$ISO_VARIANT" =~ [Rr]hcos ]]; then
-    sudo virt-install --name "$VM_NAME" --memory "$VM_MEM_MB" --vcpus "$VM_CPU" \
-      --disk path="$disk_path",format=qcow2 --os-variant rhcos \
-      --network network=default,mac=$VM_LAB_MAC --graphics vnc --location "$ISO_PATH" \
-      --extra-args "coreos.inst.install_dev=vda" \
-      --noautoconsole
+  if [[ "$GENERATE_KS" == false && "$ISO_VARIANT" =~ ^(RHCoreOS|RHCOS)$ ]]; then
+    echo "Installing Openshift Single Node Cluster..."
+    sudo virt-install \
+    --name "$VM_NAME" \
+    --memory "$VM_MEM_MB" \
+    --vcpus "$VM_CPU" \
+    --disk path="$disk_path",format=qcow2 \
+    --disk path="$ISO_PATH",device=cdrom,readonly=on \
+    --network network=default,mac="$VM_LAB_MAC" \
+    --os-variant rhel8-unknown \
+    --boot cdrom,hd \
+    --graphics vnc \
+    --noautoconsole
+
     return
   fi
+  shopt -u nocasematch
 
   sudo virt-install --name "$VM_NAME" --memory "$VM_MEM_MB" --vcpus "$VM_CPU" \
     --os-variant rhel9.0 --disk path="$disk_path",format=qcow2 \
@@ -429,9 +441,14 @@ function print_finish_message() {
   # Call the spinner function while the background task is running
   spinner
 
-  if [[ "$GENERATE_KS" == false && "$ISO_VARIANT" == [Rr]hcos ]]; then
+  shopt -s nocasematch
+  if [[ "$GENERATE_KS" == false && "$ISO_VARIANT" =~ ^(RHCoreOS|RHCOS)$ ]]; then
     VM_LAB_MAC=$(virsh dumpxml "$VM_NAME" | grep -oP 'mac address="\K[^"]+')
+    VM_IP=$(virsh domifaddr "$VM_NAME" | grep -oP '([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)' | head -n 1)
+    VM_USER=core
+    VM_PASS="(not available)"
   fi
+  shopt -u nocasematch
 
   echo
   cat <<EOF
@@ -444,12 +461,15 @@ VM is ready!
   Password:   $VM_PASS
   IP Address: $VM_IP
   MAC Address; $VM_LAB_MAC
-
-To connect:
-  ssh $VM_USER@$VM_IP
 EOF
 
   if [[ "$GENERATE_KS" == true ]]; then
+    echo
+    cat <<EOF
+To connect:
+      ssh $VM_USER@$VM_IP
+    EOF
+
     echo -e "\n✅ Verifying services on VM ($VM_IP)..."
     echo -n "- DNS (port 53):     "; nc -zvw1 $VM_IP 53 && echo OK || echo FAILED
     echo -n "- NTP (port 123/udp): "; nc -u -zvw1 $VM_IP 123 && echo OK || echo FAILED
