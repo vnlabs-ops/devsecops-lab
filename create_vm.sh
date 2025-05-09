@@ -101,7 +101,7 @@ function parse_arguments() {
 
   case "$ISO_VARIANT" in
     ubuntu) GENERATE_KS=false ;;
-    RHCoreOS|RHCOS) GENERATE_KS=false; MONITOR_REBOOT=false ;;
+    RHCoreOS|RHCOS) GENERATE_KS=false;; 
     rhel) ;; # Accept RHEL in general
     *) echo "❌ Unsupported ISO variant: $ISO_VARIANT"; exit 1 ;;
   esac
@@ -361,7 +361,7 @@ function start_vm_installation() {
     --disk path="$ISO_PATH",device=cdrom,readonly=on \
     --network network=default,mac="$VM_LAB_MAC" \
     --os-variant rhel8-unknown \
-    --boot cdrom,hd,first=cdrom,once=cdrom \
+    --boot cdrom,hd,menu=on \
     --graphics vnc \
     --noautoconsole
 
@@ -396,7 +396,7 @@ function monitor_vm_state() {
       last_check=$now
 
       if [[ "$VM_STATE" == "shut off" && $seen_shutdown -eq 0 ]]; then
-        echo -e "\n✅ VM has shut off after installation."
+        echo -e "\n✅ VM has shut off after installation."        
         seen_shutdown=1
       fi
 
@@ -490,6 +490,8 @@ fi
 
 start_vm_installation
 
-[[ "$MONITOR_REBOOT" == true ]] && monitor_vm_state
+# [[ "$MONITOR_REBOOT" == true ]] && monitor_vm_state
+
+monitor_vm_state
 
 print_finish_message
