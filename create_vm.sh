@@ -361,7 +361,7 @@ function start_vm_installation() {
     --disk path="$ISO_PATH",device=cdrom,readonly=on \
     --network network=default,mac="$VM_LAB_MAC" \
     --os-variant rhel8-unknown \
-    --boot cdrom,hd \
+    --boot cdrom,hd,first=cdrom,once=cdrom \
     --graphics vnc \
     --noautoconsole
 
