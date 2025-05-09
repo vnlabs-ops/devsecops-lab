@@ -244,6 +244,7 @@ nmstate
 net-tools
 podman
 skopeo
+coreos-installer
 %end
 
 %post --interpreter=/bin/bash
@@ -335,6 +336,17 @@ function check_existing_vm() {
 }
 
 # ==== INSTALL ====
+function generate_vm_name() {
+  local prefix="ocp"
+  local suffix=$(cat /proc/sys/kernel/random/uuid | tr -d -c 'a-zA-Z0-9' | head -c 5)
+  
+  # Combine prefix and suffix
+  VM_NAME="${prefix}${suffix}"
+  
+  # Ensure the length is exactly 8 characters
+  VM_NAME="${VM_NAME:0:8}"
+}
+
 function start_vm_installation() {
   echo "🚀 Starting VM installation for $ISO_VARIANT..."
   local disk_path="$VM_IMG_DIR/${VM_NAME}.qcow2"
@@ -348,6 +360,8 @@ function start_vm_installation() {
   fi
 
   if [[ "$GENERATE_KS" == false && "$ISO_VARIANT" =~ [Rr]hcos ]]; then
+    # Generate and assign VM name to the global variable
+    generate_vm_name
     sudo virt-install --name "$VM_NAME" --memory "$VM_MEM_MB" --vcpus "$VM_CPU" \
       --disk path="$disk_path",format=qcow2 --os-variant rhcos \
       --network network=default,mac=$VM_LAB_MAC --graphics vnc --location "$ISO_PATH" \
@@ -428,7 +442,7 @@ function print_finish_message() {
   # Call the spinner function while the background task is running
   spinner
 
-  if [[ "$GENERATE_KS" == false && "$ISO_VARIANT" =~ [Rr]hcos ]]; then
+  if [[ "$GENERATE_KS" == false && "$ISO_VARIANT" == [Rr]hcos ]]; then
     VM_LAB_MAC=$(virsh dumpxml "$VM_NAME" | grep -oP 'mac address="\K[^"]+')
   fi
 
