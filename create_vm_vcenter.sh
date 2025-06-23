@@ -21,6 +21,7 @@ VCENTER_DATASTORE=""
 VCENTER_PORTGROUP=""
 VCENTER_FOLDER=""
 VCENTER_TEMPLATE=""
+VCENTER_CONNECTED=false
 
 # Network Configuration
 VM_IP=""
@@ -186,12 +187,19 @@ function check_required_packages() {
     echo "  - RHEL/CentOS: sudo dnf install -y powershell"
     echo "  - Ubuntu: sudo apt install -y powershell"
     exit 1
+  else
+    echo "✅ PowerShell Core is installed"
   fi
 
   # Check if VMware PowerCLI is installed
-  if ! pwsh -c "Get-Module -ListAvailable VMware.PowerCLI" &>/dev/null; then
+  if ! pwsh -c "Get-Module -ListAvailable VMware.PowerCLI" &> /dev/null; then
     echo "⏳ Installing VMware PowerCLI..."
-    pwsh -c "Set-PSRepository -Name PSGallery -InstallationPolicy Trusted; Install-Module VMware.PowerCLI -Force"
+    if pwsh -c "Set-PSRepository -Name PSGallery -InstallationPolicy Trusted; Install-Module VMware.PowerCLI -Force"; then
+      echo "✅ VMware PowerCLI installed successfully"
+    else
+      echo "❌ Failed to install VMware PowerCLI"
+      exit 1
+    fi
   else
     echo "✅ VMware PowerCLI is already installed."
   fi
@@ -209,9 +217,19 @@ function check_required_packages() {
   if [[ ${#missing[@]} -gt 0 ]]; then
     echo "⚠️  Installing missing packages: ${missing[*]}"
     if command -v dnf &>/dev/null; then
-      sudo dnf install -y "${missing[@]}"
+      if sudo dnf install -y "${missing[@]}"; then
+        echo "✅ Packages installed successfully: ${missing[*]}"
+      else
+        echo "❌ Failed to install packages: ${missing[*]}"
+        exit 1
+      fi
     elif command -v apt &>/dev/null; then
-      sudo apt update && sudo apt install -y "${missing[@]}"
+      if sudo apt update && sudo apt install -y "${missing[@]}"; then
+        echo "✅ Packages installed successfully: ${missing[*]}"
+      else
+        echo "❌ Failed to install packages: ${missing[*]}"
+        exit 1
+      fi
     else
       echo "❌ Unable to install packages. Please install manually: ${missing[*]}"
       exit 1
@@ -231,6 +249,14 @@ function generate_kickstart_file() {
   ROOT_MB=$((AVAILABLE_MB * ROOT_RATIO / 100))
   HOME_MB=$((AVAILABLE_MB * HOME_RATIO / 100))
   DATA_MB=$((AVAILABLE_MB * DATA_RATIO / 100))
+  
+  echo "💾 Disk partitioning calculated:"
+  echo "   - Boot: ${BOOT_MB}MB"
+  echo "   - Swap: ${SWAP_MB}MB"
+  echo "   - Root (/): ${ROOT_MB}MB (${ROOT_RATIO}%)"
+  echo "   - Home (/home): ${HOME_MB}MB (${HOME_RATIO}%)"
+  echo "   - Data (/data): ${DATA_MB}MB (${DATA_RATIO}%)"
+  echo "   - Total: ${TOTAL_MB}MB"
 
   local LAST_OCTET="${VM_IP##*.}"
   local NETWORK_PREFIX="${VM_IP%.*}.0"
@@ -373,15 +399,23 @@ fi
 reboot
 EOF
 
-  echo "✅ Kickstart file generated: $ks_path"
-  KS_FILE="$ks_path"
+  if [[ -f "$ks_path" ]]; then
+    echo "✅ Kickstart file generated successfully: $ks_path"
+    echo "📊 Kickstart file size: $(du -h "$ks_path" | cut -f1)"
+    KS_FILE="$ks_path"
+  else
+    echo "❌ Failed to generate kickstart file"
+    exit 1
+  fi
 }
 
 # ==== CREATE VCENTER SESSION ====
 function create_vcenter_session() {
   echo "🔐 Connecting to vCenter: $VCENTER_SERVER..."
+  echo "👤 Username: $VCENTER_USERNAME"
+  echo "🏢 Datacenter: $VCENTER_DATACENTER"
   
-  pwsh -c "
+  if pwsh -c "
     Set-PowerCLIConfiguration -InvalidCertificateAction Ignore -Confirm:\$false | Out-Null
     try {
       Connect-VIServer -Server '$VCENTER_SERVER' -User '$VCENTER_USERNAME' -Password '$VCENTER_PASSWORD' -ErrorAction Stop | Out-Null
@@ -390,7 +424,13 @@ function create_vcenter_session() {
       Write-Host '❌ Failed to connect to vCenter: ' \$_.Exception.Message
       exit 1
     }
-  " || exit 1
+  "; then
+    echo "🔗 vCenter connection established"
+    VCENTER_CONNECTED=true
+  else
+    echo "❌ Failed to establish vCenter connection"
+    exit 1
+  fi
 }
 
 # ==== CHECK EXISTING VM ====
@@ -411,24 +451,33 @@ function check_existing_vm() {
     read -p "❓ Do you want to delete it and continue? (y/N): " confirm
     if [[ "$confirm" =~ ^[Yy]$ ]]; then
       echo "🧹 Cleaning up existing VM '$VM_NAME'..."
-      pwsh -c "
+      if pwsh -c "
         try {
           \$vm = Get-VM -Name '$VM_NAME'
           if (\$vm.PowerState -eq 'PoweredOn') {
+            Write-Host '⏹️  Stopping VM...'
             Stop-VM -VM \$vm -Confirm:\$false | Out-Null
           }
+          Write-Host '🗑️  Deleting VM...'
           Remove-VM -VM \$vm -DeletePermanently -Confirm:\$false | Out-Null
           Write-Host '✅ VM deleted successfully'
         } catch {
           Write-Host '❌ Failed to delete VM: ' \$_.Exception.Message
           exit 1
         }
-      " || exit 1
+      "; then
+        echo "✅ VM cleanup completed successfully"
+      else
+        echo "❌ VM cleanup failed"
+        exit 1
+      fi
     else
       read -p "📝 Enter a new VM name: " new_vm_name
       VM_NAME="$new_vm_name"
       echo "🔁 New VM will be created as '$VM_NAME'"
     fi
+  else
+    echo "✅ VM name '$VM_NAME' is available"
   fi
 }
 
@@ -436,59 +485,92 @@ function check_existing_vm() {
 function upload_kickstart_to_datastore() {
   if [[ "$GENERATE_KS" == true && -f "$KS_FILE" ]]; then
     echo "📤 Uploading kickstart file to datastore..."
+    echo "💾 Datastore: $VCENTER_DATASTORE"
+    echo "📁 File: $KS_FILE"
     
-    pwsh -c "
+    if pwsh -c "
       try {
+        Write-Host '🔍 Connecting to datastore...'
         \$datastore = Get-Datastore -Name '$VCENTER_DATASTORE'
+        Write-Host '📂 Creating datastore drive...'
         \$drive = New-PSDrive -Location \$datastore -Name ds -PSProvider VimDatastore -Root '\'
+        Write-Host '⬆️  Copying kickstart file...'
         Copy-DatastoreItem -Item '$KS_FILE' -Destination 'ds:\$KS_FILE' -Force
+        Write-Host '🧹 Cleaning up drive...'
         Remove-PSDrive -Name ds -Confirm:\$false
         Write-Host '✅ Kickstart uploaded to datastore'
       } catch {
         Write-Host '❌ Failed to upload kickstart: ' \$_.Exception.Message
         exit 1
       }
-    " || exit 1
+    "; then
+      echo "✅ Kickstart upload completed successfully"
+    else
+      echo "❌ Kickstart upload failed"
+      exit 1
+    fi
+  else
+    echo "⏭️  Skipping kickstart upload (not generating kickstart or file not found)"
   fi
 }
 
 # ==== CREATE VM ====
 function create_vm() {
   echo "🚀 Creating VM '$VM_NAME'..."
+  echo "💻 Configuration:"
+  echo "   - Name: $VM_NAME"
+  echo "   - CPU: $VM_CPU cores"
+  echo "   - RAM: $VM_MEM_GB GB"
+  echo "   - Disk: $VM_DISK_SIZE GB"
+  echo "   - Network: $VCENTER_PORTGROUP"
+  echo "   - IP: $VM_IP"
   
   local vm_creation_script=""
   
   if [[ -n "$VCENTER_TEMPLATE" ]]; then
+    echo "📋 Using template: $VCENTER_TEMPLATE"
     # Clone from template
     vm_creation_script="
+      Write-Host '🔍 Getting template...'
       \$template = Get-Template -Name '$VCENTER_TEMPLATE'
+      Write-Host '💾 Getting datastore...'
       \$datastore = Get-Datastore -Name '$VCENTER_DATASTORE'
+      Write-Host '🖥️  Getting cluster...'
       \$cluster = Get-Cluster -Name '$VCENTER_CLUSTER'
+      Write-Host '🌐 Getting port group...'
       \$portgroup = Get-VirtualPortGroup -Name '$VCENTER_PORTGROUP'
       
+      Write-Host '⚙️  Creating customization spec...'
       \$spec = New-OSCustomizationSpec -Name 'temp-$VM_NAME' -Type Linux -Domain '$VM_LAB_DOMAIN' -DnsServer '$VM_DNS' -DnsSuffix '$VM_LAB_DOMAIN'
       \$nicmapping = Get-OSCustomizationNicMapping -OSCustomizationSpec \$spec
       Set-OSCustomizationNicMapping -OSCustomizationNicMapping \$nicmapping -IpMode UseStaticIP -IpAddress '$VM_IP' -SubnetMask '$VM_NETMASK' -DefaultGateway '$VM_GATEWAY'
       
+      Write-Host '🔄 Cloning VM from template...'
       \$vm = New-VM -Name '$VM_NAME' -Template \$template -Datastore \$datastore -ResourcePool \$cluster -OSCustomizationSpec \$spec
       
-      # Clean up temp customization spec
+      Write-Host '🧹 Cleaning up customization spec...'
       Remove-OSCustomizationSpec -OSCustomizationSpec \$spec -Confirm:\$false
     "
   else
+    echo "💿 Using ISO: $ISO_PATH"
     # Create from ISO
     vm_creation_script="
+      Write-Host '💾 Getting datastore...'
       \$datastore = Get-Datastore -Name '$VCENTER_DATASTORE'
+      Write-Host '🖥️  Getting cluster...'
       \$cluster = Get-Cluster -Name '$VCENTER_CLUSTER'
+      Write-Host '🌐 Getting port group...'
       \$portgroup = Get-VirtualPortGroup -Name '$VCENTER_PORTGROUP'
       
+      Write-Host '🆕 Creating new VM...'
       \$vm = New-VM -Name '$VM_NAME' -Datastore \$datastore -ResourcePool \$cluster -NumCpu $VM_CPU -MemoryGB $VM_MEM_GB -DiskGB $VM_DISK_SIZE -NetworkName '$VCENTER_PORTGROUP' -GuestId rhel9_64Guest
       
-      # Add CD-ROM with ISO
+      Write-Host '💿 Configuring CD-ROM with ISO...'
       if ('$ISO_PATH' -match '^\[.*\].*') {
         # Datastore ISO path
         \$cdrom = Get-CDDrive -VM \$vm
         Set-CDDrive -CD \$cdrom -IsoPath '$ISO_PATH' -StartConnected:\$true -Confirm:\$false | Out-Null
+        Write-Host '✅ ISO attached to VM'
       } else {
         Write-Host '⚠️  ISO path should be in datastore format: [datastore] path/to/iso.iso'
       }
@@ -497,8 +579,9 @@ function create_vm() {
 
   # Add kickstart parameters if using kickstart
   if [[ "$GENERATE_KS" == true ]]; then
+    echo "⚙️  Configuring kickstart boot options..."
     vm_creation_script+="
-      # Add kickstart boot parameters
+      Write-Host '⚙️  Adding kickstart boot parameters...'
       \$bootOptions = New-Object VMware.Vim.VirtualMachineBootOptions
       \$bootOptions.BootDelay = 3000
       \$extraConfig = New-Object VMware.Vim.optionvalue
@@ -510,18 +593,22 @@ function create_vm() {
       \$spec.ExtraConfig += \$extraConfig
       
       \$vm.ExtensionData.ReconfigVM(\$spec)
+      Write-Host '✅ Boot options configured'
     "
   fi
 
   # Move to folder if specified
   if [[ -n "$VCENTER_FOLDER" ]]; then
+    echo "📁 Moving VM to folder: $VCENTER_FOLDER"
     vm_creation_script+="
+      Write-Host '📁 Moving VM to folder...'
       \$folder = Get-Folder -Name '$VCENTER_FOLDER'
       Move-VM -VM \$vm -Destination \$folder | Out-Null
+      Write-Host '✅ VM moved to folder'
     "
   fi
 
-  pwsh -c "
+  if pwsh -c "
     try {
       $vm_creation_script
       Write-Host '✅ VM created successfully'
@@ -529,23 +616,35 @@ function create_vm() {
       Write-Host '❌ Failed to create VM: ' \$_.Exception.Message
       exit 1
     }
-  " || exit 1
+  "; then
+    echo "✅ VM '$VM_NAME' created successfully"
+  else
+    echo "❌ VM creation failed"
+    exit 1
+  fi
 }
 
 # ==== START VM ====
 function start_vm() {
   echo "▶️  Starting VM '$VM_NAME'..."
   
-  pwsh -c "
+  if pwsh -c "
     try {
+      Write-Host '🔍 Getting VM...'
       \$vm = Get-VM -Name '$VM_NAME'
+      Write-Host '⚡ Powering on VM...'
       Start-VM -VM \$vm -Confirm:\$false | Out-Null
       Write-Host '✅ VM started successfully'
     } catch {
       Write-Host '❌ Failed to start VM: ' \$_.Exception.Message
       exit 1
     }
-  " || exit 1
+  "; then
+    echo "✅ VM '$VM_NAME' is now powered on"
+  else
+    echo "❌ Failed to start VM '$VM_NAME'"
+    exit 1
+  fi
 }
 
 # ==== MONITOR VM STATE ====
@@ -576,6 +675,7 @@ function monitor_vm_state() {
       "PoweredOff")
         if [[ "$seen_shutdown" == false ]]; then
           echo -e "\n✅ VM has shut down after installation."
+          echo "📋 Installation appears to be complete"
           seen_shutdown=true
           echo "🔄 Starting VM..."
           start_vm
@@ -584,6 +684,7 @@ function monitor_vm_state() {
       "PoweredOn")
         if [[ "$seen_shutdown" == true ]]; then
           echo -e "\n✅ VM is now running after reboot."
+          echo "🎉 Installation and first boot completed successfully"
           installation_complete=true
           break
         fi
@@ -601,23 +702,37 @@ function cleanup_and_disconnect() {
   echo "🧹 Cleaning up..."
   
   # Remove local kickstart file
-  [[ -f "$KS_FILE" ]] && rm -f "$KS_FILE"
+  if [[ -f "$KS_FILE" ]]; then
+    rm -f "$KS_FILE"
+    echo "✅ Local kickstart file removed"
+  fi
   
-  # Disconnect from vCenter
-  pwsh -c "
-    try {
-      Disconnect-VIServer -Server '$VCENTER_SERVER' -Confirm:\$false
-      Write-Host '✅ Disconnected from vCenter'
-    } catch {
-      Write-Host '⚠️  Error disconnecting from vCenter'
-    }
-  " 2>/dev/null || true
+  # Disconnect from vCenter only if we were connected
+  if [[ "$VCENTER_CONNECTED" == true ]]; then
+    echo "🔌 Disconnecting from vCenter..."
+    if pwsh -c "
+      try {
+        Disconnect-VIServer -Server '$VCENTER_SERVER' -Confirm:\$false
+        Write-Host '✅ Disconnected from vCenter'
+      } catch {
+        Write-Host '⚠️  Error disconnecting from vCenter'
+      }
+    " 2> /dev/null; then
+      echo "✅ vCenter session closed"
+    else
+      echo "⚠️  Warning: Could not disconnect from vCenter (session may still be active)"
+    fi
+  else
+    echo "ℹ️  No vCenter connection to close"
+  fi
 }
 
 # ==== PRINT FINISH MESSAGE ====
 function print_finish_message() {
   echo "⏳ Waiting for services to start..."
+  echo "💤 Sleeping for 10 seconds to allow services to initialize..."
   sleep 10
+  echo "✅ Wait period completed"
   
   # Get VM information
   local vm_info=$(pwsh -c "
@@ -664,9 +779,12 @@ EOF
     
     # Check services
     if command -v nc &>/dev/null; then
-      echo -n "- SSH (port 22):     "; nc -zvw3 "${actual_ip:-$VM_IP}" 22 && echo "OK" || echo "FAILED"
-      echo -n "- DNS (port 53):     "; nc -zvw3 "${actual_ip:-$VM_IP}" 53 && echo "OK" || echo "FAILED"
-      echo -n "- NFS (port 2049):   "; nc -zvw3 "${actual_ip:-$VM_IP}" 2049 && echo "OK" || echo "FAILED"
+      echo "🔍 Testing network connectivity and services..."
+      echo -n "- SSH (port 22):     "; nc -zvw3 "${actual_ip:-$VM_IP}" 22 && echo "✅ OK" || echo "❌ FAILED"
+      echo -n "- DNS (port 53):     "; nc -zvw3 "${actual_ip:-$VM_IP}" 53 && echo "✅ OK" || echo "❌ FAILED"
+      echo -n "- NFS (port 2049):   "; nc -zvw3 "${actual_ip:-$VM_IP}" 2049 && echo "✅ OK" || echo "❌ FAILED"
+    else
+      echo "⚠️  'nc' command not available - skipping service connectivity tests"
     fi
   fi
 }
