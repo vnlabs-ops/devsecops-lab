@@ -6,6 +6,7 @@ Put .env and configure-services.sh in the same directory.
 ### Quick setup with all services using auto-detected network
 ```
 sudo ./configure-services.sh --services all
+```
 
 ### Use custom .env file
 ```
