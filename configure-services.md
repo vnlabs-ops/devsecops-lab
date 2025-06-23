@@ -10,15 +10,17 @@ sudo ./configure-services.sh --services all
 ### Use custom .env file
 ```
 sudo ./configure-services.sh --env-file production.env --services all
+```
 
 ### Dry run to see what would be configured
 ```
 sudo ./configure-services.sh --dry-run --services all
+```
 
 ### Configure only NFS with custom path
 ```
 sudo ./configure-services.sh --enable-nfs --nfs-export-path /shared
-
+```
 
 After running the script you will need to create dns records in the file /var/named/<your domain>.zone for Single Node Opensshift, for example:
 ```
@@ -37,6 +39,7 @@ api.demo IN A     192.168.44.11
 *.apps.demo IN A     192.168.44.11
 
 ZONE
+```
 
 and the reverse dns file:
 ```
@@ -52,3 +55,4 @@ cat > /var/named/40.168.192.in-addr.arpa.rev <<REV
 11    IN PTR   api.demo.rhlab.kh.
 12.rhlab.kh.
 REV
+```
