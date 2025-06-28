@@ -5,7 +5,13 @@
 ![Platform](https://img.shields.io/badge/platform-RHEL%2FCentOS-red.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 
-A comprehensive automation script for configuring DNS, NTP, and NFS services on RHEL/CentOS systems with automatic network detection and intelligent configuration management.
+A comprehensive automation script for configuring DNS, NTP, NFS, and HTTPD services on RHEL/CentOS systems with automatic network detection and intelligent configuration management.
+
+## 📦 Additional Scripts
+
+This documentation also covers:
+- **`manage-certs.sh`** - Let's Encrypt wildcard SSL certificate management using Podman
+- **`dns-hooks.sh`** - DNS challenge automation for GCP Cloud DNS and AWS Route53
 
 ## 🚀 Features
 
@@ -125,6 +131,19 @@ sudo ./configure-services.sh --enable-dns --dns-forwarders "1.1.1.1,8.8.8.8"
 | `--nfs-exports LIST` | Custom export definitions | - |
 | `--nfs-export-options OPTS` | Default export options | rw,sync,no_subtree_check |
 | `--nfs-allowed-networks LIST` | Networks allowed to mount | auto |
+
+#### HTTPD Configuration
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--enable-httpd` | Enable Apache HTTP server | false |
+| `--httpd-document-root PATH` | Web document root directory | /var/www/html |
+| `--httpd-server-name NAME` | Server name (auto=hostname.domain) | auto |
+| `--httpd-port PORT` | HTTP port | 80 |
+| `--enable-ssl` | Enable SSL/TLS support | false |
+| `--httpd-ssl-port PORT` | HTTPS port | 443 |
+| `--httpd-ssl-cert PATH` | SSL certificate path | /etc/ssl/certs/httpd.crt |
+| `--httpd-ssl-key PATH` | SSL private key path | /etc/ssl/private/httpd.key |
+| `--httpd-custom-config TEXT` | Additional Apache configuration | - |
 
 ### Environment File (.env)
 
