@@ -314,11 +314,21 @@ function configure_dns() {
     fi
     
     if [[ "$DNS_ALLOW_QUERY" == "auto" ]]; then
-        DNS_ALLOW_QUERY="$NETWORK_CIDR"
+        # Convert CIDR to BIND-compatible format
+        if [[ "$NETWORK_CIDR" =~ ^([0-9.]+)/([0-9]+)$ ]]; then
+            DNS_ALLOW_QUERY="${BASH_REMATCH[1]}/${BASH_REMATCH[2]}"
+        else
+            DNS_ALLOW_QUERY="$NETWORK_CIDR"
+        fi
     fi
     
     if [[ "$DNS_ALLOW_RECURSION" == "auto" ]]; then
-        DNS_ALLOW_RECURSION="$NETWORK_CIDR"
+        # Convert CIDR to BIND-compatible format
+        if [[ "$NETWORK_CIDR" =~ ^([0-9.]+)/([0-9]+)$ ]]; then
+            DNS_ALLOW_RECURSION="${BASH_REMATCH[1]}/${BASH_REMATCH[2]}"
+        else
+            DNS_ALLOW_RECURSION="$NETWORK_CIDR"
+        fi
     fi
     
     # Generate reverse zone if not provided
@@ -330,18 +340,43 @@ function configure_dns() {
     # Generate serial if not provided
     [[ -z "$DNS_SERIAL" ]] && DNS_SERIAL=$(date +%Y%m%d%H)
     
-    local named_config="options {
-    listen-on port 53 { 127.0.0.1; ${PRIMARY_IP}; };
+    local named_config="acl trusted {
+    localhost;
+    localnets;
+    ${DNS_ALLOW_QUERY};
+};
+
+options {
+    listen-on port 53 { any; };
+    listen-on-v6 port 53 { ::1; };
     directory \"/var/named\";
     dump-file \"/var/named/data/cache_dump.db\";
     statistics-file \"/var/named/data/named_stats.txt\";
     memstatistics-file \"/var/named/data/named_mem_stats.txt\";
-    allow-query { ${DNS_ALLOW_QUERY}; };
-    allow-recursion { ${DNS_ALLOW_RECURSION}; };
+    allow-query { trusted; };
+    allow-query-cache { trusted; };
+    allow-recursion { trusted; };
     forwarders { $(echo $DNS_FORWARDERS | sed 's/,/; /g'); };
     recursion yes;
     dnssec-validation no;
+    auth-nxdomain no;
+    notify explicit;
 };
+
+logging {
+    channel default_debug {
+        file \"data/named.run\";
+        severity dynamic;
+    };
+};
+
+zone \".\" IN {
+    type hint;
+    file \"named.ca\";
+};
+
+include \"/etc/named.rfc1912.zones\";
+include \"/etc/named.root.key\";
 
 zone \"${DOMAIN}\" IN {
     type master;
