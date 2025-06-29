@@ -107,8 +107,54 @@ podman run --rm --name certbot \
 
 echo "Certificate obtained successfully!"
 
-# Create cron job for certificate renewal
-CRON_JOB="0 0 * * 0 podman run --rm --name certbot-renew -v /etc/letsencrypt:/etc/letsencrypt:Z -v /var/lib/letsencrypt:/var/lib/letsencrypt:Z certbot/certbot renew --quiet --renew-hook 'systemctl reload httpd'"
+# Define paths for copying certificates
+LE_CERT_DIR="/etc/letsencrypt/live/$DOMAIN"
+TARGET_CERT_DIR="/etc/ssl/certs"
+TARGET_KEY_DIR="/etc/ssl/private"
+
+# Ensure target directories exist
+sudo mkdir -p "$TARGET_CERT_DIR" "$TARGET_KEY_DIR"
+
+# Copy Let's Encrypt certificates to standard locations
+if [ -d "$LE_CERT_DIR" ]; then
+    echo "Copying Let's Encrypt certificates to standard locations..."
+    sudo cp "$LE_CERT_DIR/fullchain.pem" "$TARGET_CERT_DIR/httpd.crt"
+    sudo cp "$LE_CERT_DIR/privkey.pem" "$TARGET_KEY_DIR/httpd.key"
+    
+    # Set proper permissions
+    sudo chmod 644 "$TARGET_CERT_DIR/httpd.crt"
+    sudo chmod 600 "$TARGET_KEY_DIR/httpd.key"
+    sudo chown root:root "$TARGET_CERT_DIR/httpd.crt" "$TARGET_KEY_DIR/httpd.key"
+    
+    echo "Certificates copied and permissions set successfully!"
+else
+    echo "Warning: Let's Encrypt certificate directory not found at $LE_CERT_DIR"
+fi
+
+# Create certificate copy script for renewals
+CERT_COPY_SCRIPT="/usr/local/bin/copy-letsencrypt-certs.sh"
+sudo tee "$CERT_COPY_SCRIPT" > /dev/null << EOF
+#!/bin/bash
+# Script to copy Let's Encrypt certificates to standard locations
+DOMAIN="$DOMAIN"
+LE_CERT_DIR="/etc/letsencrypt/live/\$DOMAIN"
+TARGET_CERT_DIR="/etc/ssl/certs"
+TARGET_KEY_DIR="/etc/ssl/private"
+
+if [ -d "\$LE_CERT_DIR" ]; then
+    cp "\$LE_CERT_DIR/fullchain.pem" "\$TARGET_CERT_DIR/httpd.crt"
+    cp "\$LE_CERT_DIR/privkey.pem" "\$TARGET_KEY_DIR/httpd.key"
+    chmod 644 "\$TARGET_CERT_DIR/httpd.crt"
+    chmod 600 "\$TARGET_KEY_DIR/httpd.key"
+    chown root:root "\$TARGET_CERT_DIR/httpd.crt" "\$TARGET_KEY_DIR/httpd.key"
+    systemctl reload httpd
+fi
+EOF
+
+sudo chmod +x "$CERT_COPY_SCRIPT"
+
+# Create cron job for certificate renewal with certificate copying
+CRON_JOB="0 0 * * 0 podman run --rm --name certbot-renew -v /etc/letsencrypt:/etc/letsencrypt:Z -v /var/lib/letsencrypt:/var/lib/letsencrypt:Z certbot/certbot renew --quiet --renew-hook '$CERT_COPY_SCRIPT'"
 (crontab -l 2>/dev/null; echo "$CRON_JOB") | crontab -
 
-echo "Wildcard certificate for *.$DOMAIN obtained and renewal job added to cron."
+echo "Wildcard certificate for *.$DOMAIN obtained, copied to standard locations, and renewal job added to cron."

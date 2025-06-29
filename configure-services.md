@@ -159,6 +159,16 @@ TIMEZONE=Asia/Phnom_Penh
 DNS_ENABLED=true
 NTP_ENABLED=true
 NFS_ENABLED=true
+HTTPD_ENABLED=true
+
+# ==== HTTPD SERVER CONFIGURATION ====
+HTTPD_DOCUMENT_ROOT=/var/www/html
+HTTPD_SERVER_NAME=auto
+HTTPD_PORT=80
+HTTPD_SSL_ENABLED=true
+HTTPD_SSL_PORT=443
+HTTPD_SSL_CERT_PATH=/etc/ssl/certs/httpd.crt
+HTTPD_SSL_KEY_PATH=/etc/ssl/private/httpd.key
 
 # ==== DNS SERVER CONFIGURATION ====
 DNS_FORWARDERS=auto,8.8.8.8,1.1.1.1
@@ -211,6 +221,13 @@ You can use `auto` in configuration to leverage these detected values:
 - Sets proper permissions and SELinux contexts
 - Supports custom export configurations
 - Automatic firewall rule configuration
+
+### HTTPD Server (Apache)
+- Configures Apache HTTP server with optional SSL support
+- Creates default document root and welcome page
+- Supports custom virtual host configurations
+- Automatic SSL certificate integration with Let's Encrypt
+- Firewall rules for HTTP (80) and HTTPS (443) ports
 
 ## 🛡️ Security Features
 
